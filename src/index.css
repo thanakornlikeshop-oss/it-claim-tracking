@@ -1,0 +1,27 @@
+/* ── Masaru Return System - Global Styles ── */
+
+:root {
+  --sans: 'Plus Jakarta Sans', 'IBM Plex Sans Thai', system-ui, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+  color-scheme: light dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--sans);
+  line-height: 1.6;
+}
+
+#root {
+  width: 100%;
+  max-width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
