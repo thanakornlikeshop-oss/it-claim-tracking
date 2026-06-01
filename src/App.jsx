@@ -102,6 +102,51 @@ const PLAT_META = (dk) => ({
 
 const CHART_PALETTE = ["#4f46e5", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
+const ACTION_STATUS_LIST = ["ส่งตัวเดิม", "ส่งตัวใหม่", "เก็บเข้าคลัง", "ช่างกำลังดำเนินการ", "รออะไหล่", "ซ่อมแล้ว เก็บเข้าคลังดี", "เก็บเข้าคลังเสีย", "รอซ่อม", "รอซ่อม คืนคลัง"];
+const CARRIER_LIST = ["Thai Post", "Flash", "SPX", "LEX", "J&T", "อื่นๆ"];
+const INCOMING_STATUS_LIST = ["รอตรวจเช็ค", "เช็คสินค้าแล้ว", "ไม่เคลม", "อื่นๆ"];
+
+function unpackDetails(detailsStr) {
+  const defaults = {
+    note: "",
+    carrier: "",
+    incoming_tracking: "",
+    incoming_status: "รอตรวจเช็ค",
+    repair_date: "",
+    repair_details: "",
+    action_status: "ส่งตัวเดิม",
+    operator: "",
+    new_tracking: "",
+    return_phone: ""
+  };
+  if (!detailsStr) return defaults;
+  const trimmed = detailsStr.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return { ...defaults, ...parsed };
+    } catch (e) {
+      // ignore, fall through
+    }
+  }
+  return { ...defaults, note: detailsStr };
+}
+
+function packDetails(unpacked) {
+  return JSON.stringify({
+    note: unpacked.note || "",
+    carrier: unpacked.carrier || "",
+    incoming_tracking: unpacked.incoming_tracking || "",
+    incoming_status: unpacked.incoming_status || "รอตรวจเช็ค",
+    repair_date: unpacked.repair_date || "",
+    repair_details: unpacked.repair_details || "",
+    action_status: unpacked.action_status || "ส่งตัวเดิม",
+    operator: unpacked.operator || "",
+    new_tracking: unpacked.new_tracking || "",
+    return_phone: unpacked.return_phone || ""
+  });
+}
+
 /* ─── Missing Utility Components ──────────────────────────────── */
 
 function Spin({ size = 18, color }) {
@@ -752,7 +797,9 @@ function Field({ label, req, full, children, C }) {
 function ReturnForm({ open, onClose, onSave, initial, C }) {
   const defaultForm = {
     date: nowLocal(), platform: "", store: "", staff: "", order_id: "", customer: "", address: "",
-    phone: "", sku: "", price: "", reason: "", details: "", evidence_url: "", cod: "-", sla: "", status: "รับเรื่อง"
+    phone: "", sku: "", price: "", reason: "", details: "", evidence_url: "", cod: "-", sla: "", status: "รับเรื่อง",
+    note: "", carrier: "", incoming_tracking: "", incoming_status: "รอตรวจเช็ค",
+    repair_date: "", repair_details: "", action_status: "ส่งตัวเดิม", operator: "", new_tracking: "", return_phone: ""
   };
   const [f, setF] = useState(defaultForm);
   const [busy, setBusy] = useState(false);
@@ -765,7 +812,24 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         x.setMinutes(x.getMinutes() - x.getTimezoneOffset());
         return x.toISOString().slice(0, 16);
       })() : "";
-      setF({ ...defaultForm, ...initial, date: dt, price: initial.price || "", evidence_url: initial.evidence_url || "" });
+      const unpacked = unpackDetails(initial.details);
+      setF({
+        ...defaultForm,
+        ...initial,
+        date: dt,
+        price: initial.price || "",
+        evidence_url: initial.evidence_url || "",
+        note: unpacked.note || "",
+        carrier: unpacked.carrier || "",
+        incoming_tracking: unpacked.incoming_tracking || "",
+        incoming_status: unpacked.incoming_status || "รอตรวจเช็ค",
+        repair_date: unpacked.repair_date || "",
+        repair_details: unpacked.repair_details || "",
+        action_status: unpacked.action_status || "ส่งตัวเดิม",
+        operator: unpacked.operator || "",
+        new_tracking: unpacked.new_tracking || "",
+        return_phone: unpacked.return_phone || ""
+      });
     } else {
       setF({ ...defaultForm, date: nowLocal() });
     }
@@ -780,7 +844,34 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
     
     setBusy(true);
     try {
-      await onSave(f);
+      const packed = packDetails({
+        note: f.note,
+        carrier: f.carrier,
+        incoming_tracking: f.incoming_tracking,
+        incoming_status: f.incoming_status,
+        repair_date: f.repair_date,
+        repair_details: f.repair_details,
+        action_status: f.action_status,
+        operator: f.operator,
+        new_tracking: f.new_tracking,
+        return_phone: f.return_phone
+      });
+      const payload = {
+        ...f,
+        details: packed
+      };
+      delete payload.note;
+      delete payload.carrier;
+      delete payload.incoming_tracking;
+      delete payload.incoming_status;
+      delete payload.repair_date;
+      delete payload.repair_details;
+      delete payload.action_status;
+      delete payload.operator;
+      delete payload.new_tracking;
+      delete payload.return_phone;
+
+      await onSave(payload);
       onClose();
     } catch (err) {
       console.error(err);
@@ -799,7 +890,7 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         <PrimaryBtn onClick={save} loading={busy} icon="floppy-disk" C={C}>บันทึกข้อมูล</PrimaryBtn>
       </>}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Field label="วันที่รับเรื่อง" req C={C}><input type="datetime-local" style={IS} value={f.date || ""} onChange={set("date")}/></Field>
+        <Field label="วันที่แจ้งเคส / รับเรื่อง" req C={C}><input type="datetime-local" style={IS} value={f.date || ""} onChange={set("date")}/></Field>
         <Field label="แพลตฟอร์ม" req C={C}>
           <select style={SS} value={f.platform || ""} onChange={set("platform")}>
             <option value="">-- เลือกแพลตฟอร์ม --</option>
@@ -808,7 +899,13 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         </Field>
         <Field label="ร้านค้า (Store)" C={C}><input type="text" style={IS} placeholder="เช่น TOOLSTHAILAND" value={f.store || ""} onChange={set("store")}/></Field>
         <Field label="ผู้ดูแลเคส (Staff)" C={C}><input type="text" style={IS} placeholder="เช่น หมิว Lazada" value={f.staff || ""} onChange={set("staff")}/></Field>
-        <Field label="เลขคำสั่งซื้อ (Order ID)" req C={C}><input type="text" style={IS} placeholder="ป้อนรหัสอ้างอิงออเดอร์" value={f.order_id || ""} onChange={set("order_id")}/></Field>
+        <Field label="เลขพัสดุที่ส่งเคลม / Order ID" req C={C}><input type="text" style={IS} placeholder="ป้อนรหัสอ้างอิงออเดอร์ หรือเลขพัสดุส่งเคลม" value={f.order_id || ""} onChange={set("order_id")}/></Field>
+        <Field label="ขนส่งที่ลูกค้าส่งเคลม" C={C}>
+          <select style={SS} value={f.carrier || ""} onChange={set("carrier")}>
+            <option value="">-- เลือกขนส่ง --</option>
+            {CARRIER_LIST.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
         <Field label="ชื่อผู้รับ/ลูกค้า (Customer)" C={C}><input type="text" style={IS} placeholder="ชื่อ-นามสกุล ลูกค้า" value={f.customer || ""} onChange={set("customer")}/></Field>
         <Field label="ที่อยู่ผู้รับสำหรับการส่งกลับ (Address)" full C={C}>
           <textarea rows={2} style={{ ...IS, resize: "vertical", minHeight: 60 }} placeholder="ที่อยู่ในการจัดส่งสินค้าตัวใหม่คืนแก่ลูกค้า" value={f.address || ""} onChange={set("address")}/>
@@ -824,15 +921,34 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
           </select>
         </Field>
         <Field label="รายละเอียดเพิ่มเติม" full C={C}>
-          <textarea rows={3} style={{ ...IS, resize: "vertical", minHeight: 76 }} placeholder="คำอธิบาย อาการ หรือเหตุผลเพิ่มเติมโดยละเอียด..." value={f.details || ""} onChange={set("details")}/>
+          <textarea rows={3} style={{ ...IS, resize: "vertical", minHeight: 76 }} placeholder="คำอธิบาย อาการ หรือเหตุผลเพิ่มเติมโดยละเอียด..." value={f.note || ""} onChange={set("note")}/>
         </Field>
         <Field label="ลิงก์รูปหลักฐาน (Image URL)" C={C}><input type="url" style={IS} placeholder="https://image-host.com/evidence.jpg" value={f.evidence_url || ""} onChange={set("evidence_url")}/></Field>
         <Field label="ระยะเวลาแก้ไข (SLA)" C={C}><input type="text" style={IS} placeholder="เช่น 3 วัน" value={f.sla || ""} onChange={set("sla")}/></Field>
-        <Field label="สถานะเคส" req C={C}>
+        <Field label="สถานะเคสหลัก" req C={C}>
           <select style={SS} value={f.status || "รับเรื่อง"} onChange={set("status")}>
             {STATUS_LIST.map(s => <option key={s}>{s}</option>)}
           </select>
         </Field>
+        <div style={{ gridColumn: "1/-1", margin: "8px 0", borderTop: `1px solid ${C.border}`, paddingTop: 16, fontWeight: 700, fontSize: 13, color: C.accent }}>
+          ⚙️ ข้อมูลการตรวจสอบและการส่งซ่อม
+        </div>
+        <Field label="เลขพัสดุรับเข้าคลัง" C={C}><input type="text" style={IS} placeholder="ป้อนเลขพัสดุสินค้าที่รับเข้ามา" value={f.incoming_tracking || ""} onChange={set("incoming_tracking")}/></Field>
+        <Field label="สถานะรับเข้า" C={C}>
+          <select style={SS} value={f.incoming_status || "รอตรวจเช็ค"} onChange={set("incoming_status")}>
+            {INCOMING_STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="วันที่ซ่อม-เช็คสินค้า" C={C}><input type="datetime-local" style={IS} value={f.repair_date || ""} onChange={set("repair_date")}/></Field>
+        <Field label="รายละเอียดงานซ่อมสินค้า" C={C}><input type="text" style={IS} placeholder="เช่น เปลี่ยนบอร์ดอะไหล่, ซ่อมสวิทช์ไฟ" value={f.repair_details || ""} onChange={set("repair_details")}/></Field>
+        <Field label="สถานะดำเนินการส่งซ่อม" C={C}>
+          <select style={SS} value={f.action_status || "ส่งตัวเดิม"} onChange={set("action_status")}>
+            {ACTION_STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="ผู้ดำเนินการ (Operator/ช่าง)" C={C}><input type="text" style={IS} placeholder="ชื่อช่างหรือผู้ดำเนินการ" value={f.operator || ""} onChange={set("operator")}/></Field>
+        <Field label="เลขพัสดุส่งกลับใหม่" C={C}><input type="text" style={IS} placeholder="ป้อนเลขพัสดุใหม่ที่ส่งให้ลูกค้า" value={f.new_tracking || ""} onChange={set("new_tracking")}/></Field>
+        <Field label="เบอร์โทรศัพท์สำหรับส่งกลับ (ถ้าต่างจากเดิม)" C={C}><input type="tel" style={IS} placeholder="0xx-xxx-xxxx" value={f.return_phone || ""} onChange={set("return_phone")}/></Field>
       </div>
     </Modal>
   );
@@ -926,11 +1042,9 @@ function DelConfirm({ open, onClose, onConfirm, item, C }) {
   );
 }
 
-function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusChange, C, dk, toast }) {
+function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, onEdit, C, dk, toast }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
-  const [editItem, setEditItem] = useState(null);
   const [delItem, setDelItem] = useState(null);
   const [copyStatus, setCopyStatus] = useState({});
 
@@ -942,6 +1056,7 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
     
     if (!search) return true;
     const q = search.toLowerCase();
+    const unpacked = unpackDetails(r.details);
     return [
       r.order_id,
       r.customer,
@@ -949,30 +1064,44 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
       r.sku,
       r.staff,
       r.store,
-      r.reason
+      r.reason,
+      unpacked.note,
+      unpacked.carrier,
+      unpacked.incoming_tracking,
+      unpacked.new_tracking,
+      unpacked.operator
     ].some(val => (val || "").toLowerCase().includes(q));
   });
 
-  const handleCopy = (orderId) => {
-    copyToClipboard(orderId, (success) => {
+  const handleCopy = (text, successMsg) => {
+    copyToClipboard(text, (success) => {
       if (success) {
-        setCopyStatus(p => ({ ...p, [orderId]: true }));
-        toast("คัดลอก Order ID ไปยังคลิปบอร์ดแล้ว");
-        setTimeout(() => setCopyStatus(p => ({ ...p, [orderId]: false })), 2000);
+        setCopyStatus(p => ({ ...p, [text]: true }));
+        toast(successMsg || "คัดลอกแล้ว");
+        setTimeout(() => setCopyStatus(p => ({ ...p, [text]: false })), 2000);
       } else {
         toast("คัดลอกไม่สำเร็จ", "error");
       }
     });
   };
 
-  async function handleSave(form) {
-    const rec = { ...form, price: form.price !== "" ? parseFloat(form.price) : null };
-    if (editItem) {
-      await onEdit(editItem.id, rec);
-    } else {
-      await onAdd(rec);
-    }
-  }
+  const handleActionStatusChange = async (id, newStatus) => {
+    const item = returns.find(r => r.id === id);
+    if (!item) return;
+    const unpacked = unpackDetails(item.details);
+    unpacked.action_status = newStatus;
+    const packed = packDetails(unpacked);
+    await onEdit(id, { ...item, details: packed });
+  };
+
+  const handleIncomingStatusChange = async (id, newStatus) => {
+    const item = returns.find(r => r.id === id);
+    if (!item) return;
+    const unpacked = unpackDetails(item.details);
+    unpacked.incoming_status = newStatus;
+    const packed = packDetails(unpacked);
+    await onEdit(id, { ...item, details: packed });
+  };
 
   const KPIS = [
     { label: "เคสทั้งหมด",          value: returns.length,               icon: "clipboard-list", gradient: C.g1 },
@@ -1018,14 +1147,14 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 14px", gap: 10 }}>
             <i className="fas fa-magnifying-glass" style={{ color: C.muted, fontSize: 13 }}/>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหารายการ, SKU, ชื่อ, เบอร์..."
-              style={{ border: "none", background: "transparent", color: C.text, fontSize: 13, outline: "none", width: 220 }}/>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหารายการ, SKU, ขนส่ง, เลขพัสดุ..."
+              style={{ border: "none", background: "transparent", color: C.text, fontSize: 13, outline: "none", width: 240 }}/>
             {search && (
               <i className="fas fa-circle-xmark" style={{ color: C.muted, cursor: "pointer", fontSize: 13 }} onClick={() => setSearch("")}/>
             )}
           </div>
           
-          <PrimaryBtn onClick={() => { setEditItem(null); setFormOpen(true); }} icon="plus" C={C}>เพิ่มรายการใหม่</PrimaryBtn>
+          <PrimaryBtn onClick={triggerAdd} icon="plus" C={C}>เพิ่มรายการใหม่</PrimaryBtn>
         </div>
       </div>
 
@@ -1046,7 +1175,11 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
             <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: C.surface }}>
-                  {["#", "วันที่", "แพลตฟอร์ม", "ร้านค้า", "ผู้ดูแล", "Order ID", "ลูกค้า", "เบอร์โทร", "SKU", "ราคา", "สาเหตุ", "COD", "SLA", "หลักฐาน", "สถานะ", "จัดการ"].map((h, i, arr) => (
+                  {[
+                    "#", "วันที่แจ้งเคส", "เลขพัสดุที่ส่งเคลม / Order ID", "ขนส่ง", "สาเหตุ", "สินค้า SKU", "รายละเอียด", "แพลตฟอร์ม", 
+                    "สถานะเคส", "เลขพัสดุรับเข้า", "สถานะรับเข้า", "พนักงาน", "มือถือ", "วันที่ซ่อม-เช็ค", 
+                    "รายละเอียดงานซ่อม", "สถานะดำเนินการ", "ผู้ดำเนินการ", "เลขพัสดุใหม่", "มือถือส่งกลับ", "จัดการ"
+                  ].map((h, i, arr) => (
                     <th key={i} style={{
                       padding: `10px ${i === 0 ? 20 : 12}px`,
                       textAlign: "left", fontSize: 10.5, fontWeight: 700,
@@ -1065,6 +1198,10 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
                   const sm = STATUS_META(dk);
                   const ss = sm[r.status] || sm["รับเรื่อง"];
                   const isCopied = !!copyStatus[r.order_id];
+                  const unpacked = unpackDetails(r.details);
+                  const isIncomingCopied = !!copyStatus[unpacked.incoming_tracking];
+                  const isNewCopied = !!copyStatus[unpacked.new_tracking];
+
                   return (
                     <tr
                       key={r.id}
@@ -1074,11 +1211,8 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
                     >
                       <td style={{ padding: "11px 12px 11px 20px", color: C.muted, fontSize: 12, fontWeight: 500 }}>{fi + 1}</td>
                       <td style={{ padding: "11px 12px", color: C.muted, fontSize: 11.5, whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" }}>{fmtDate(r.date)}</td>
-                      <td style={{ padding: "11px 12px" }}><PlatBadge platform={r.platform || "อื่นๆ"} dk={dk}/></td>
-                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap", color: C.text, fontWeight: 500, fontSize: 12.5 }}>{r.store || "-"}</td>
-                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap", color: C.sec, fontSize: 12.5 }}>{r.staff || "-"}</td>
-
-                      {/* Order ID + copy */}
+                      
+                      {/* เลขพัสดุที่ส่งเคลม */}
                       <td style={{ padding: "11px 12px", whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <span style={{
@@ -1086,7 +1220,7 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
                             fontFamily: "'JetBrains Mono',monospace", letterSpacing: .2,
                           }}>{r.order_id}</span>
                           <button
-                            onClick={() => handleCopy(r.order_id)}
+                            onClick={() => handleCopy(r.order_id, "คัดลอกเลขพัสดุส่งเคลมแล้ว")}
                             style={{
                               background: "none", border: "none", cursor: "pointer",
                               padding: "2px 4px", borderRadius: 4,
@@ -1100,62 +1234,132 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
                         </div>
                       </td>
 
-                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap", fontWeight: 500, color: C.text, fontSize: 12.5 }}>{r.customer || "-"}</td>
-                      <td style={{ padding: "11px 12px", color: C.sec, fontSize: 12, whiteSpace: "nowrap" }}>{r.phone || "-"}</td>
+                      {/* ขนส่ง */}
+                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap", color: C.text, fontWeight: 500 }}>{unpacked.carrier || "-"}</td>
+
+                      {/* สาเหตุ */}
+                      <td style={{ padding: "11px 12px", color: C.text, whiteSpace: "nowrap" }}>{r.reason || "-"}</td>
+
+                      {/* สินค้า SKU */}
                       <td style={{ padding: "11px 12px", fontWeight: 700, whiteSpace: "nowrap", color: C.text, fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }}>{r.sku || "-"}</td>
-                      <td style={{ padding: "11px 12px", fontWeight: 700, whiteSpace: "nowrap", color: C.text }}>{fmtMoney(r.price)}</td>
-                      <td style={{ padding: "11px 12px", maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: C.sec, fontSize: 12 }} title={r.reason}>{r.reason || "-"}</td>
-                      <td style={{ padding: "11px 12px", color: C.sec, fontSize: 12 }}>{r.cod || "-"}</td>
+                      
+                      {/* รายละเอียด */}
+                      <td style={{ padding: "11px 12px", maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: C.sec, fontSize: 12 }} title={unpacked.note}>{unpacked.note || "-"}</td>
 
-                      {/* SLA pill */}
-                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap" }}>
-                        {r.sla
-                          ? <span style={{ background: C.accentSoft, color: C.accent, padding: "2px 9px", borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{r.sla}</span>
-                          : <span style={{ color: C.muted, fontSize: 12 }}>-</span>}
-                      </td>
+                      {/* แพลตฟอร์ม */}
+                      <td style={{ padding: "11px 12px" }}><PlatBadge platform={r.platform || "อื่นๆ"} dk={dk}/></td>
 
-                      {/* Evidence thumbnail */}
-                      <td style={{ padding: "11px 12px" }}>
-                        {r.evidence_url ? (
-                          <a href={r.evidence_url} target="_blank" rel="noopener noreferrer">
-                            <img
-                              src={r.evidence_url}
-                              alt="หลักฐาน"
-                              style={{ width: 36, height: 36, borderRadius: 7, objectFit: "cover", border: `1.5px solid ${C.border}`, display: "block", transition: "transform .15s", cursor: "zoom-in" }}
-                              onMouseEnter={e => e.target.style.transform = "scale(1.18)"}
-                              onMouseLeave={e => e.target.style.transform = ""}
-                              onError={e => { e.target.outerHTML = `<span style="font-size:11px;color:${C.muted};font-style:italic">ไม่พบ</span>`; }}
-                            />
-                          </a>
-                        ) : (
-                          <span style={{ fontStyle: "italic", color: C.muted, fontSize: 11 }}>ไม่มี</span>
-                        )}
-                      </td>
-
-                      {/* Status select — coloured by status */}
+                      {/* สถานะเคสหลัก */}
                       <td style={{ padding: "11px 12px" }}>
                         <select
                           value={r.status}
                           onChange={e => onStatusChange(r.id, e.target.value)}
                           style={{
-                            appearance: "none", padding: "5px 26px 5px 10px", borderRadius: 8,
-                            border: `1.5px solid ${ss.border}`, fontSize: 12, fontWeight: 600,
-                            cursor: "pointer", background: ss.bg, color: ss.color, minWidth: 128,
-                            fontFamily: "'DM Sans','IBM Plex Sans Thai',sans-serif",
+                            appearance: "none", padding: "5px 22px 5px 8px", borderRadius: 6,
+                            border: `1.5px solid ${ss.border}`, fontSize: 11.5, fontWeight: 600,
+                            cursor: "pointer", background: ss.bg, color: ss.color, minWidth: 110,
+                            fontFamily: "inherit",
                             backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
-                            backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center",
-                            transition: "border-color .15s, background .15s",
+                            backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
                           }}
                         >
                           {STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </td>
 
+                      {/* เลขพัสดุรับเข้า */}
+                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap" }}>
+                        {unpacked.incoming_tracking ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ fontWeight: 600, color: C.text, fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}>{unpacked.incoming_tracking}</span>
+                            <button
+                              onClick={() => handleCopy(unpacked.incoming_tracking, "คัดลอกเลขพัสดุรับเข้าแล้ว")}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4, color: isIncomingCopied ? C.success : C.muted }}
+                              title="คัดลอก"
+                            >
+                              <i className={`fas fa-${isIncomingCopied ? "check" : "copy"}`} style={{ fontSize: 11 }}/>
+                            </button>
+                          </div>
+                        ) : "-"}
+                      </td>
+
+                      {/* สถานะรับเข้า */}
+                      <td style={{ padding: "11px 12px" }}>
+                        <select
+                          value={unpacked.incoming_status || "รอตรวจเช็ค"}
+                          onChange={e => handleIncomingStatusChange(r.id, e.target.value)}
+                          style={{
+                            appearance: "none", padding: "4px 20px 4px 6px", borderRadius: 6,
+                            border: `1px solid ${C.border}`, fontSize: 11.5, fontWeight: 600,
+                            cursor: "pointer", background: C.surface, color: C.text, minWidth: 100,
+                            fontFamily: "inherit",
+                            backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
+                            backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
+                          }}
+                        >
+                          {INCOMING_STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+
+                      {/* พนักงาน */}
+                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap", color: C.sec, fontSize: 12.5 }}>{r.staff || "-"}</td>
+
+                      {/* มือถือลูกค้า */}
+                      <td style={{ padding: "11px 12px", color: C.sec, fontSize: 12, whiteSpace: "nowrap" }}>{r.phone || "-"}</td>
+
+                      {/* วันที่ซ่อม-เช็ค */}
+                      <td style={{ padding: "11px 12px", color: C.muted, fontSize: 11.5, whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" }}>
+                        {unpacked.repair_date ? unpacked.repair_date.replace("T", " ") : "-"}
+                      </td>
+
+                      {/* รายละเอียดซ่อม */}
+                      <td style={{ padding: "11px 12px", maxWidth: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: C.sec, fontSize: 12 }} title={unpacked.repair_details}>{unpacked.repair_details || "-"}</td>
+
+                      {/* สถานะดำเนินการ */}
+                      <td style={{ padding: "11px 12px" }}>
+                        <select
+                          value={unpacked.action_status || "ส่งตัวเดิม"}
+                          onChange={e => handleActionStatusChange(r.id, e.target.value)}
+                          style={{
+                            appearance: "none", padding: "4px 20px 4px 6px", borderRadius: 6,
+                            border: `1px solid ${C.border}`, fontSize: 11.5, fontWeight: 600,
+                            cursor: "pointer", background: C.surface, color: C.text, minWidth: 120,
+                            fontFamily: "inherit",
+                            backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
+                            backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
+                          }}
+                        >
+                          {ACTION_STATUS_LIST.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </td>
+
+                      {/* ผู้ดำเนินการ */}
+                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap", color: C.sec, fontSize: 12.5 }}>{unpacked.operator || "-"}</td>
+
+                      {/* เลขพัสดุใหม่ */}
+                      <td style={{ padding: "11px 12px", whiteSpace: "nowrap" }}>
+                        {unpacked.new_tracking ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ fontWeight: 600, color: C.text, fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }}>{unpacked.new_tracking}</span>
+                            <button
+                              onClick={() => handleCopy(unpacked.new_tracking, "คัดลอกเลขพัสดุใหม่แล้ว")}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4, color: isNewCopied ? C.success : C.muted }}
+                              title="คัดลอก"
+                            >
+                              <i className={`fas fa-${isNewCopied ? "check" : "copy"}`} style={{ fontSize: 11 }}/>
+                            </button>
+                          </div>
+                        ) : "-"}
+                      </td>
+
+                      {/* มือถือส่งกลับ */}
+                      <td style={{ padding: "11px 12px", color: C.sec, fontSize: 12, whiteSpace: "nowrap" }}>{unpacked.return_phone || r.phone || "-"}</td>
+
                       {/* Actions */}
                       <td style={{ padding: "11px 16px", position: "sticky", right: 0, background: C.raised, borderLeft: `1px solid ${C.border}`, zIndex: 4 }}>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <IconBtn icon="pen"       onClick={() => { setEditItem(r); setFormOpen(true); }} C={C}              title="แก้ไข"/>
-                          <IconBtn icon="trash-can" onClick={() => setDelItem(r)}                         C={C} variant="danger" title="ลบ"/>
+                          <IconBtn icon="pen"       onClick={() => triggerEdit(r)} C={C}              title="แก้ไข"/>
+                          <IconBtn icon="trash-can" onClick={() => setDelItem(r)}   C={C} variant="danger" title="ลบ"/>
                         </div>
                       </td>
                     </tr>
@@ -1186,7 +1390,6 @@ function ReturnCasesPage({ returns, loading, onAdd, onEdit, onDelete, onStatusCh
         </div>
       </Card>
 
-      <ReturnForm open={formOpen} onClose={() => setFormOpen(false)} onSave={handleSave} initial={editItem} C={C}/>
       <DelConfirm open={!!delItem} onClose={() => setDelItem(null)} item={delItem} C={C}
         onConfirm={async () => { await onDelete(delItem.id); setDelItem(null); }}/>
     </div>
@@ -1634,6 +1837,184 @@ function getSS(C) {
   };
 }
 
+function BulkSearchPage({ returns = [], C, dk, toast, triggerEdit }) {
+  const [inputText, setInputText] = useState("");
+  const [results, setResults] = useState([]);
+  const [copyStatus, setCopyStatus] = useState({});
+
+  const handleSearch = () => {
+    const numbers = inputText
+      .split(/[\n,\s\t]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    const searchResults = numbers.map(num => {
+      const foundCase = returns.find(r => {
+        const orderIdMatch = (r.order_id || "").trim().toLowerCase() === num.toLowerCase();
+        const unpacked = unpackDetails(r.details);
+        const incomingMatch = (unpacked.incoming_tracking || "").trim().toLowerCase() === num.toLowerCase();
+        const newMatch = (unpacked.new_tracking || "").trim().toLowerCase() === num.toLowerCase();
+        return orderIdMatch || incomingMatch || newMatch;
+      });
+
+      if (foundCase) {
+        const unpacked = unpackDetails(foundCase.details);
+        const caseDate = foundCase.date ? fmtDate(foundCase.date).split(" ")[0] : "-";
+        return {
+          number: num,
+          found: true,
+          date: caseDate,
+          actionStatus: unpacked.action_status || "ส่งตัวเดิม",
+          caseStatus: foundCase.status,
+          record: foundCase
+        };
+      } else {
+        return {
+          number: num,
+          found: false,
+          date: "",
+          actionStatus: "",
+          caseStatus: "",
+          record: null
+        };
+      }
+    });
+
+    setResults(searchResults);
+  };
+
+  const handleCopy = (text, successMsg) => {
+    copyToClipboard(text, (success) => {
+      if (success) {
+        setCopyStatus(p => ({ ...p, [text]: true }));
+        toast(successMsg || "คัดลอกสำเร็จ");
+        setTimeout(() => setCopyStatus(p => ({ ...p, [text]: false })), 2000);
+      } else {
+        toast("คัดลอกไม่สำเร็จ", "error");
+      }
+    });
+  };
+
+  const copyTextResults = () => {
+    if (results.length === 0) return;
+    const text = results.map(r => {
+      if (r.found) {
+        return `${r.number} : พบเลข : ${r.date} : ${r.actionStatus}`;
+      } else {
+        return `${r.number} : ไม่พบเลข`;
+      }
+    }).join("\n");
+
+    handleCopy(text, "คัดลอกผลการค้นหาทั้งหมดแล้ว");
+  };
+
+  const copyColumnResults = () => {
+    if (results.length === 0) return;
+    const text = results.map(r => {
+      if (r.found) {
+        return `พบเลข : ${r.date} : ${r.actionStatus}`;
+      } else {
+        return `ไม่พบเลข`;
+      }
+    }).join("\n");
+
+    handleCopy(text, "คัดลอกเฉพาะสเตตัส (คอลัมน์) สำหรับ Google Sheets แล้ว");
+  };
+
+  return (
+    <div className="fade-up">
+      <Card C={C} style={{ marginBottom: 24 }}>
+        <SHdr title="ระบบค้นหาสเตตัสพัสดุแบบกลุ่ม (Bulk Search)" icon="magnifying-glass-plus" C={C} sub="ป้อนเลขพัสดุส่งเคลม เลขพัสดุรับเข้า หรือเลขพัสดุส่งกลับใหม่ พร้อมกันเพื่อเช็คสถานะและรายละเอียดการเคลม" />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <textarea
+            rows={8}
+            style={{ ...getIS(C), width: "100%", fontFamily: "'JetBrains Mono', monospace", fontSize: 13, lineHeight: 1.5 }}
+            placeholder="ป้อนเลขพัสดุ เช่น บรรทัดละ 1 เลข&#10;TH265769951069C&#10;797761830876&#10;880017164051"
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
+          />
+          <div style={{ display: "flex", gap: 12 }}>
+            <PrimaryBtn onClick={handleSearch} icon="magnifying-glass" C={C}>ค้นหาข้อมูล</PrimaryBtn>
+            {results.length > 0 && (
+              <>
+                <GhostBtn onClick={copyTextResults} icon="copy" C={C}>คัดลอกผลการค้นหา</GhostBtn>
+                <GhostBtn onClick={copyColumnResults} icon="clipboard-list" C={C}>คัดลอกเฉพาะผลลัพธ์ (คอลัมน์)</GhostBtn>
+              </>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {results.length > 0 && (
+        <Card C={C} style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontWeight: 700, color: C.text }}>ผลลัพธ์การค้นหา ({results.length} รายการ)</div>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: C.surface }}>
+                  {["เลขที่ค้นหา", "สถานะการค้นพบ", "วันที่พบเลข / แจ้งเคส", "สถานะดำเนินการ", "สถานะเคสหลัก", "จัดการ"].map((h, i) => (
+                    <th key={i} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: C.muted, borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r, i) => {
+                  const isNumCopied = !!copyStatus[r.number];
+                  return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${C.borderLight}` }}>
+                      <td style={{ padding: "12px 16px", fontWeight: 700, color: C.text, fontFamily: "'JetBrains Mono', monospace" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>{r.number}</span>
+                          <button
+                            onClick={() => handleCopy(r.number, "คัดลอกเลขแล้ว")}
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: isNumCopied ? C.success : C.muted }}
+                            title="คัดลอก"
+                          >
+                            <i className={`fas fa-${isNumCopied ? "check" : "copy"}`} style={{ fontSize: 10 }}/>
+                          </button>
+                        </div>
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>
+                        {r.found ? (
+                          <span style={{ background: C.successSoft, color: C.success, padding: "3px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>🟢 พบเลข</span>
+                        ) : (
+                          <span style={{ background: C.dangerSoft, color: C.danger, padding: "3px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>🔴 ไม่พบเลข</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px 16px", color: C.sec, fontFamily: "'JetBrains Mono', monospace" }}>{r.date || "-"}</td>
+                      <td style={{ padding: "12px 16px" }}>
+                        {r.found ? (
+                          <span style={{ background: C.accentSoft, color: C.accent, padding: "3px 8px", borderRadius: 6, fontSize: 11.5, fontWeight: 700 }}>{r.actionStatus}</span>
+                        ) : "-"}
+                      </td>
+                      <td style={{ padding: "12px 16px" }}>{r.found ? <StatusBadge status={r.caseStatus} dk={dk} /> : "-"}</td>
+                      <td style={{ padding: "12px 16px" }}>
+                        {r.found && r.record && (
+                          <button
+                            onClick={() => triggerEdit(r.record)}
+                            style={{
+                              background: "none", border: "none", color: C.accent, fontWeight: 600,
+                              cursor: "pointer", fontSize: 12.5, textDecoration: "underline", display: "flex", alignItems: "center", gap: 4
+                            }}
+                          >
+                            <i className="fas fa-pen"/> แก้ไขเคส
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [page, setPage]       = useState("returns");
   const [returns, setReturns] = useState([]);
@@ -1642,6 +2023,9 @@ export default function App() {
   const [lastSync, setLS]     = useState(null);
   const [theme, setTheme]     = useState(() => localStorage.getItem("masaru_theme") || "light");
   const { toasts, push: toast } = useToast();
+  
+  const [formOpen, setFormOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
 
   const dk = theme === "dark";
   const C  = dk ? T.d : T.l;
@@ -1729,9 +2113,20 @@ export default function App() {
     { key: "returns",   icon: "table-list",    label: "จัดการคืนสินค้า",  badge: returns.filter(r => r.status === "รับเรื่อง").length },
     { key: "reports",   icon: "chart-simple",  label: "รายงาน & สถิติ",   badge: null },
     { key: "inventory", icon: "boxes-stacked", label: "คลังวิเคราะห์ SKU",  badge: null },
+    { key: "bulkSearch", icon: "magnifying-glass-plus", label: "ค้นหาเลขสถานะ", badge: null },
   ];
-  const PAGE_TITLE = { returns: "Return Case Management", reports: "Analytics Report", inventory: "SKU Analytics" };
-  const PAGE_SUB   = { returns: "จัดการ ตรวจสอบ และอัปเดตสเตตัสพัสดุเคลมคืนสินค้า", reports: "ข้อมูลวิเคราะห์ประสิทธิภาพและปริมาณความเสียหายรายวัน", inventory: "สถิติและประเมินคุณภาพสินค้าเพื่อการควบคุมดีเฟค" };
+  const PAGE_TITLE = { 
+    returns: "Return Case Management", 
+    reports: "Analytics Report", 
+    inventory: "SKU Analytics", 
+    bulkSearch: "Bulk Status Search" 
+  };
+  const PAGE_SUB   = { 
+    returns: "จัดการ ตรวจสอบ และอัปเดตสเตตัสพัสดุเคลมคืนสินค้า", 
+    reports: "ข้อมูลวิเคราะห์ประสิทธิภาพและปริมาณความเสียหายรายวัน", 
+    inventory: "สถิติและประเมินคุณภาพสินค้าเพื่อการควบคุมดีเฟค", 
+    bulkSearch: "ค้นหาสถานะพัสดุหลายรายการพร้อมกันได้ทีละ 20 - 30 เลข" 
+  };
 
   const sidebarW = 248;
   const headerH  = 60;
@@ -1939,11 +2334,20 @@ export default function App() {
           overflowY: "auto", background: C.bg,
           transition: "background .25s ease",
         }}>
-          {page === "returns"   && <ReturnCasesPage returns={returns} loading={loading} onAdd={handleAdd} onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatus} C={C} dk={dk} toast={toast}/>}
+          {page === "returns"   && <ReturnCasesPage returns={returns} loading={loading} triggerAdd={() => { setEditItem(null); setFormOpen(true); }} triggerEdit={(item) => { setEditItem(item); setFormOpen(true); }} onDelete={handleDelete} onEdit={handleEdit} onStatusChange={handleStatus} C={C} dk={dk} toast={toast}/>}
           {page === "reports"   && <ReportsPage     returns={returns} C={C} dk={dk}/>}
           {page === "inventory" && <InventoryPage   returns={returns} C={C} dk={dk}/>}
+          {page === "bulkSearch" && <BulkSearchPage returns={returns} C={C} dk={dk} toast={toast} triggerEdit={(item) => { setEditItem(item); setFormOpen(true); }}/>}
         </main>
       </div>
+
+      <ReturnForm open={formOpen} onClose={() => setFormOpen(false)} onSave={async (f) => {
+        if (editItem) {
+          await handleEdit(editItem.id, f);
+        } else {
+          await handleAdd(f);
+        }
+      }} initial={editItem} C={C}/>
 
       <Toasts toasts={toasts} C={C}/>
     </>
