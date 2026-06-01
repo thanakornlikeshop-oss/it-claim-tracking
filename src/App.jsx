@@ -12,7 +12,7 @@ const db    = createClient(SUPA_URL, SUPA_KEY);
 const TABLE = "return_cases";
 
 const STATUS_LIST   = ["รับเรื่อง", "รอสินค้าตีกลับ", "ตรวจสอบแล้ว", "เสร็จสิ้น"];
-const PLATFORM_LIST = ["Lazada", "Shopee", "TikTok", "อื่นๆ"];
+const PLATFORM_LIST = ["Lazada", "Shopee", "TikTok", "Facebook", "อื่นๆ"];
 const REASON_LIST   = ["ได้รับสินค้าไม่ครบ", "ได้รับสินค้าที่เสียหาย", "สินค้าชำรุดจากการขนส่ง", "เปลี่ยนใจ/สั่งผิด", "สินค้าเสียหาย", "อื่นๆ"];
 
 /* ─── Design Tokens (skill-spec) ─────────────────────────────────
@@ -97,6 +97,7 @@ const PLAT_META = (dk) => ({
   Lazada:  { bg: dk ? "rgba(139, 92, 246, 0.15)" : "#f5f3ff", color: dk ? "#c4b5fd" : "#7c3aed" },
   Shopee:  { bg: dk ? "rgba(249, 115, 22, 0.15)" : "#fff7ed", color: dk ? "#fdba74" : "#ea580c" },
   TikTok:  { bg: dk ? "rgba(243, 244, 246, 0.1)" : "#f3f4f6", color: dk ? "#e5e7eb" : "#374151" },
+  Facebook: { bg: dk ? "rgba(59, 130, 246, 0.15)" : "#eff6ff", color: dk ? "#60a5fa" : "#1d4ed8" },
   "อื่นๆ": { bg: dk ? "rgba(255, 255, 255, 0.05)" : "#f9fafb", color: dk ? "#9ca3af" : "#6b7280" },
 });
 
@@ -430,7 +431,7 @@ function StatusBadge({ status, dk }) {
 
 function PlatBadge({ platform, dk }) {
   const meta = (PLAT_META(dk)[platform] || PLAT_META(dk)["อื่นๆ"]);
-  const icons = { Lazada: "🛍️", Shopee: "🟠", TikTok: "🎵", "อื่นๆ": "📦" };
+  const icons = { Lazada: "🛍️", Shopee: "🟠", TikTok: "🎵", Facebook: "🔵", "อื่นๆ": "📦" };
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", borderRadius: 6,
