@@ -11,7 +11,7 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const db    = createClient(SUPA_URL, SUPA_KEY);
 const TABLE = "return_cases";
 
-const STATUS_LIST   = ["รับเรื่อง", "รอสินค้าตีกลับ", "ตรวจสอบแล้ว", "เสร็จสิ้น"];
+const STATUS_LIST   = ["รับเรื่อง", "รอสินค้าตีกลับ", "ตรวจสอบแล้ว", "ช่างกำลังซ่อม", "เสร็จสิ้น"];
 const PLATFORM_LIST = ["Lazada", "Shopee", "TikTok", "Facebook", "อื่นๆ"];
 const REASON_LIST   = ["ได้รับสินค้าไม่ครบ", "ได้รับสินค้าที่เสียหาย", "สินค้าชำรุดจากการขนส่ง", "เปลี่ยนใจ/สั่งผิด", "สินค้าเสียหาย", "อื่นๆ"];
 
@@ -90,6 +90,7 @@ const STATUS_META = (dk) => ({
   "รับเรื่อง":       { bg: dk ? "rgba(96,165,250,0.15)"  : "#eff6ff",  color: dk ? "#60a5fa" : "#2563eb",  border: dk ? "rgba(96,165,250,0.3)"  : "rgba(37,99,235,0.2)"  },
   "รอสินค้าตีกลับ": { bg: dk ? "rgba(251,191,36,0.15)"   : "#fffbeb",  color: dk ? "#fbbf24" : "#d97706",  border: dk ? "rgba(251,191,36,0.3)"   : "rgba(217,119,6,0.2)"  },
   "ตรวจสอบแล้ว":    { bg: dk ? "rgba(99,102,241,0.15)"  : "#eef2ff",  color: dk ? "#818cf8" : "#4f46e5",  border: dk ? "rgba(99,102,241,0.3)"  : "rgba(79,70,229,0.2)"   },
+  "ช่างกำลังซ่อม":  { bg: dk ? "rgba(245,158,11,0.15)"  : "#fff7ed",  color: dk ? "#fbbf24" : "#ea580c",  border: dk ? "rgba(245,158,11,0.3)"  : "rgba(234,88,12,0.2)"   },
   "เสร็จสิ้น":      { bg: dk ? "rgba(52,211,153,0.15)"  : "#ecfdf5",  color: dk ? "#34d399" : "#059669",  border: dk ? "rgba(52,211,153,0.3)"  : "rgba(5,150,105,0.2)"   },
 });
 
@@ -118,7 +119,8 @@ function unpackDetails(detailsStr) {
     action_status: "ส่งตัวเดิม",
     operator: "",
     new_tracking: "",
-    return_phone: ""
+    return_phone: "",
+    actual_platform: ""
   };
   if (!detailsStr) return defaults;
   const trimmed = detailsStr.trim();
@@ -144,8 +146,18 @@ function packDetails(unpacked) {
     action_status: unpacked.action_status || "ส่งตัวเดิม",
     operator: unpacked.operator || "",
     new_tracking: unpacked.new_tracking || "",
-    return_phone: unpacked.return_phone || ""
+    return_phone: unpacked.return_phone || "",
+    actual_platform: unpacked.actual_platform || ""
   });
+}
+
+function mapRow(r) {
+  if (!r) return r;
+  const unpacked = unpackDetails(r.details);
+  if (unpacked.actual_platform) {
+    return { ...r, platform: unpacked.actual_platform };
+  }
+  return r;
 }
 
 /* ─── Missing Utility Components ──────────────────────────────── */
@@ -209,6 +221,19 @@ const fmtDate  = dt => {
   if (!dt) return "-";
   const d = new Date(dt);
   return isNaN(d) ? String(dt) : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const claimSla = (r) => {
+  if (!r?.date) return "-";
+  const start = new Date(r.date);
+  if (isNaN(start)) return "-";
+  const unpacked = unpackDetails(r.details);
+  const end = r.status === "เสร็จสิ้น" && unpacked.repair_date ? new Date(unpacked.repair_date) : new Date();
+  if (isNaN(end)) return "-";
+  const diff = Math.max(0, end - start);
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  if (days > 0) return `${days} วัน ${hours} ชม.`;
+  return `${hours} ชม.`;
 };
 const fmtMoney = n => (n != null && n !== "") ? "฿" + Number(n).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
 const nowLocal = () => {
@@ -346,6 +371,31 @@ function GlobalStyles() {
       .stagger > *:nth-child(2) { animation-delay: 60ms; }
       .stagger > *:nth-child(3) { animation-delay:120ms; }
       .stagger > *:nth-child(4) { animation-delay:180ms; }
+
+      .return-compact-table th:nth-child(4),
+      .return-compact-table td:nth-child(4),
+      .return-compact-table th:nth-child(5),
+      .return-compact-table td:nth-child(5),
+      .return-compact-table th:nth-child(7),
+      .return-compact-table td:nth-child(7),
+      .return-compact-table th:nth-child(10),
+      .return-compact-table td:nth-child(10),
+      .return-compact-table th:nth-child(11),
+      .return-compact-table td:nth-child(11),
+      .return-compact-table th:nth-child(12),
+      .return-compact-table td:nth-child(12),
+      .return-compact-table th:nth-child(13),
+      .return-compact-table td:nth-child(13),
+      .return-compact-table th:nth-child(14),
+      .return-compact-table td:nth-child(14),
+      .return-compact-table th:nth-child(15),
+      .return-compact-table td:nth-child(15),
+      .return-compact-table th:nth-child(17),
+      .return-compact-table td:nth-child(17),
+      .return-compact-table th:nth-child(18),
+      .return-compact-table td:nth-child(18) {
+        display: none;
+      }
 
       /* ─── Input focus ring ─── */
       input, select, textarea {
@@ -829,7 +879,8 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         action_status: unpacked.action_status || "ส่งตัวเดิม",
         operator: unpacked.operator || "",
         new_tracking: unpacked.new_tracking || "",
-        return_phone: unpacked.return_phone || ""
+        return_phone: unpacked.return_phone || "",
+        platform: unpacked.actual_platform || initial.platform || ""
       });
     } else {
       setF({ ...defaultForm, date: nowLocal() });
@@ -855,10 +906,13 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         action_status: f.action_status,
         operator: f.operator,
         new_tracking: f.new_tracking,
-        return_phone: f.return_phone
+        return_phone: f.return_phone,
+        actual_platform: f.platform === "Facebook" ? "Facebook" : ""
       });
       const payload = {
         ...f,
+        platform: f.platform === "Facebook" ? "อื่นๆ" : f.platform,
+        sla: claimSla({ date: f.date, status: f.status, details: packed }),
         details: packed
       };
       delete payload.note;
@@ -925,7 +979,7 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
           <textarea rows={3} style={{ ...IS, resize: "vertical", minHeight: 76 }} placeholder="คำอธิบาย อาการ หรือเหตุผลเพิ่มเติมโดยละเอียด..." value={f.note || ""} onChange={set("note")}/>
         </Field>
         <Field label="ลิงก์รูปหลักฐาน (Image URL)" C={C}><input type="url" style={IS} placeholder="https://image-host.com/evidence.jpg" value={f.evidence_url || ""} onChange={set("evidence_url")}/></Field>
-        <Field label="ระยะเวลาแก้ไข (SLA)" C={C}><input type="text" style={IS} placeholder="เช่น 3 วัน" value={f.sla || ""} onChange={set("sla")}/></Field>
+        <Field label="ระยะเวลาเคลม SLA (อัตโนมัติ)" C={C}><input type="text" style={{ ...IS, background: C.surface, color: C.sec }} value={claimSla({ date: f.date, status: f.status, details: packDetails({ repair_date: f.repair_date }) })} readOnly/></Field>
         <Field label="สถานะเคสหลัก" req C={C}>
           <select style={SS} value={f.status || "รับเรื่อง"} onChange={set("status")}>
             {STATUS_LIST.map(s => <option key={s}>{s}</option>)}
@@ -949,7 +1003,6 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         </Field>
         <Field label="ผู้ดำเนินการ (Operator/ช่าง)" C={C}><input type="text" style={IS} placeholder="ชื่อช่างหรือผู้ดำเนินการ" value={f.operator || ""} onChange={set("operator")}/></Field>
         <Field label="เลขพัสดุส่งกลับใหม่" C={C}><input type="text" style={IS} placeholder="ป้อนเลขพัสดุใหม่ที่ส่งให้ลูกค้า" value={f.new_tracking || ""} onChange={set("new_tracking")}/></Field>
-        <Field label="เบอร์โทรศัพท์สำหรับส่งกลับ (ถ้าต่างจากเดิม)" C={C}><input type="tel" style={IS} placeholder="0xx-xxx-xxxx" value={f.return_phone || ""} onChange={set("return_phone")}/></Field>
       </div>
     </Modal>
   );
@@ -1043,10 +1096,69 @@ function DelConfirm({ open, onClose, onConfirm, item, C }) {
   );
 }
 
-function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, onEdit, C, dk, toast }) {
+function CaseDetailModal({ open, onClose, item, C, dk }) {
+  if (!item) return null;
+  const unpacked = unpackDetails(item.details);
+  const rows = [
+    ["วันที่แจ้งเคส", fmtDate(item.date)],
+    ["แพลตฟอร์ม", item.platform || "-"],
+    ["ร้านค้า", item.store || "-"],
+    ["ผู้ดูแลเคส", item.staff || "-"],
+    ["Order ID / เลขพัสดุส่งเคลม", item.order_id || "-"],
+    ["ขนส่งที่ลูกค้าส่งเคลม", unpacked.carrier || "-"],
+    ["ลูกค้า", item.customer || "-"],
+    ["มือถือ", item.phone || "-"],
+    ["ที่อยู่ส่งกลับ", item.address || "-"],
+    ["SKU", item.sku || "-"],
+    ["ราคา", fmtMoney(item.price)],
+    ["COD", item.cod || "-"],
+    ["สาเหตุ", item.reason || "-"],
+    ["รายละเอียดเพิ่มเติม", unpacked.note || "-"],
+    ["สถานะเคส", item.status || "-"],
+    ["ระยะเวลาเคลม SLA", claimSla(item)],
+    ["เลขพัสดุรับเข้า", unpacked.incoming_tracking || "-"],
+    ["สถานะรับเข้า", unpacked.incoming_status || "-"],
+    ["วันที่ซ่อม-เช็ค", unpacked.repair_date ? unpacked.repair_date.replace("T", " ") : "-"],
+    ["รายละเอียดงานซ่อม", unpacked.repair_details || "-"],
+    ["สถานะดำเนินการ", unpacked.action_status || "-"],
+    ["ผู้ดำเนินการ", unpacked.operator || "-"],
+    ["เลขพัสดุใหม่", unpacked.new_tracking || "-"],
+  ];
+
+  return (
+    <Modal open={open} onClose={onClose} title="รายละเอียดเคสคืนสินค้า" icon="circle-info" C={C} maxW={860}
+      footer={<GhostBtn onClick={onClose} C={C}>ปิด</GhostBtn>}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 10 }}>
+        {rows.map(([label, value]) => (
+          <div key={label} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", background: C.surface }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 5 }}>{label}</div>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.45, wordBreak: "break-word" }}>
+              {label === "สถานะเคส" ? <StatusBadge status={value} dk={dk}/> : value}
+            </div>
+          </div>
+        ))}
+        <div style={{ gridColumn: "1/-1", border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", background: C.surface }}>
+          <div style={{ fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 8 }}>ลิงก์รูปหลักฐาน</div>
+          {item.evidence_url ? (
+            <a href={item.evidence_url} target="_blank" rel="noreferrer" style={{ color: C.accent, fontWeight: 700, fontSize: 13, wordBreak: "break-all" }}>
+              {item.evidence_url}
+            </a>
+          ) : (
+            <div style={{ color: C.sec, fontSize: 13 }}>-</div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, onEdit, onStatusChange, C, dk, toast }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
   const [delItem, setDelItem] = useState(null);
+  const [detailItem, setDetailItem] = useState(null);
   const [copyStatus, setCopyStatus] = useState({});
 
   const counts = STATUS_LIST.reduce((a, s) => ({ ...a, [s]: returns.filter(r => r.status === s).length }), {});
@@ -1073,6 +1185,14 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
       unpacked.operator
     ].some(val => (val || "").toLowerCase().includes(q));
   });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+  const paged = filtered.slice(startIndex, startIndex + pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, search, pageSize]);
 
   const handleCopy = (text, successMsg) => {
     copyToClipboard(text, (success) => {
@@ -1173,13 +1293,13 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
               <div style={{ fontSize: 13 }}>กรุณาลองปรับเปลี่ยนตัวเลือก ค้นหา หรือป้อนข้อมูลตัวแปรใหม่</div>
             </div>
           ) : (
-            <table style={{ borderCollapse: "collapse", fontSize: 13 }}>
+            <table className="return-compact-table" style={{ borderCollapse: "collapse", fontSize: 13, width: "100%" }}>
               <thead>
                 <tr style={{ background: C.surface }}>
                   {[
                     "#", "วันที่แจ้งเคส", "เลขพัสดุที่ส่งเคลม / Order ID", "ขนส่ง", "สาเหตุ", "สินค้า SKU", "รายละเอียด", "แพลตฟอร์ม", 
                     "สถานะเคส", "เลขพัสดุรับเข้า", "สถานะรับเข้า", "พนักงาน", "มือถือ", "วันที่ซ่อม-เช็ค", 
-                    "รายละเอียดงานซ่อม", "สถานะดำเนินการ", "ผู้ดำเนินการ", "เลขพัสดุใหม่", "มือถือส่งกลับ", "จัดการ"
+                    "รายละเอียดงานซ่อม", "สถานะดำเนินการ", "ผู้ดำเนินการ", "เลขพัสดุใหม่", "SLA", "จัดการ"
                   ].map((h, i, arr) => (
                     <th key={i} style={{
                       padding: `10px ${i === 0 ? 20 : 12}px`,
@@ -1195,7 +1315,7 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, fi) => {
+                {paged.map((r, fi) => {
                   const sm = STATUS_META(dk);
                   const ss = sm[r.status] || sm["รับเรื่อง"];
                   const isCopied = !!copyStatus[r.order_id];
@@ -1210,7 +1330,7 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
                       onMouseEnter={e => e.currentTarget.style.background = C.surface}
                       onMouseLeave={e => e.currentTarget.style.background = ""}
                     >
-                      <td style={{ padding: "11px 12px 11px 20px", color: C.muted, fontSize: 12, fontWeight: 500 }}>{fi + 1}</td>
+                      <td style={{ padding: "11px 12px 11px 20px", color: C.muted, fontSize: 12, fontWeight: 500 }}>{startIndex + fi + 1}</td>
                       <td style={{ padding: "11px 12px", color: C.muted, fontSize: 11.5, whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" }}>{fmtDate(r.date)}</td>
                       
                       {/* เลขพัสดุที่ส่งเคลม */}
@@ -1353,12 +1473,13 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
                         ) : "-"}
                       </td>
 
-                      {/* มือถือส่งกลับ */}
-                      <td style={{ padding: "11px 12px", color: C.sec, fontSize: 12, whiteSpace: "nowrap" }}>{unpacked.return_phone || r.phone || "-"}</td>
+                      {/* SLA */}
+                      <td style={{ padding: "11px 12px", color: C.sec, fontSize: 12, whiteSpace: "nowrap", fontWeight: 700 }}>{claimSla(r)}</td>
 
                       {/* Actions */}
                       <td style={{ padding: "11px 16px", position: "sticky", right: 0, background: C.raised, borderLeft: `1px solid ${C.border}`, zIndex: 4 }}>
                         <div style={{ display: "flex", gap: 6 }}>
+                          <IconBtn icon="eye"       onClick={() => setDetailItem(r)} C={C}              title="ดูรายละเอียด"/>
                           <IconBtn icon="pen"       onClick={() => triggerEdit(r)} C={C}              title="แก้ไข"/>
                           <IconBtn icon="trash-can" onClick={() => setDelItem(r)}   C={C} variant="danger" title="ลบ"/>
                         </div>
@@ -1383,16 +1504,28 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
               animation: "dotPulse 2.4s ease-in-out infinite",
             }}/>
             <span>
-              แสดง <strong style={{ color: C.text }}>{filtered.length}</strong> จาก{" "}
+              แสดง <strong style={{ color: C.text }}>{filtered.length ? startIndex + 1 : 0}-{Math.min(startIndex + pageSize, filtered.length)}</strong> จาก{" "}
               <strong style={{ color: C.text }}>{returns.length}</strong> รายการ
             </span>
           </div>
-          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>Masaru RMS · Supabase</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} style={{ ...getSS(C), padding: "6px 28px 6px 10px", width: "auto", fontSize: 12 }}>
+              {[10, 20, 30, 50].map(n => <option key={n} value={n}>{n} รายการ</option>)}
+            </select>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text, borderRadius: 7, padding: "6px 10px", cursor: currentPage <= 1 ? "not-allowed" : "pointer", opacity: currentPage <= 1 ? .45 : 1 }}>
+              <i className="fas fa-chevron-left"/>
+            </button>
+            <span style={{ color: C.sec, fontSize: 12 }}>หน้า <strong style={{ color: C.text }}>{currentPage}</strong> / {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.text, borderRadius: 7, padding: "6px 10px", cursor: currentPage >= totalPages ? "not-allowed" : "pointer", opacity: currentPage >= totalPages ? .45 : 1 }}>
+              <i className="fas fa-chevron-right"/>
+            </button>
+          </div>
         </div>
       </Card>
 
       <DelConfirm open={!!delItem} onClose={() => setDelItem(null)} item={delItem} C={C}
         onConfirm={async () => { await onDelete(delItem.id); setDelItem(null); }}/>
+      <CaseDetailModal open={!!detailItem} onClose={() => setDetailItem(null)} item={detailItem} C={C} dk={dk}/>
     </div>
   );
 }
@@ -2041,7 +2174,7 @@ export default function App() {
     try {
       const { data, error } = await db.from(TABLE).select("*").order("date", { ascending: false });
       if (error) throw error;
-      setReturns(data || []);
+      setReturns((data || []).map(mapRow));
       setDbSt("connected");
       setLS(new Date());
     } catch (e) {
@@ -2060,7 +2193,7 @@ export default function App() {
     try {
       const { data, error } = await db.from(TABLE).insert([{ ...form, price: form.price !== "" ? parseFloat(form.price) : null }]).select();
       if (error) throw error;
-      setReturns(p => [data[0], ...p]);
+      setReturns(p => [mapRow(data[0]), ...p]);
       setLS(new Date());
       toast("บันทึกเคสความเสียหายสำเร็จ");
     } catch (error) {
@@ -2071,9 +2204,14 @@ export default function App() {
 
   async function handleEdit(id, form) {
     try {
-      const { data, error } = await db.from(TABLE).update({ ...form, price: form.price !== "" ? parseFloat(form.price) : null }).eq("id", id).select();
+      const dbForm = {
+        ...form,
+        platform: form.platform === "Facebook" ? "อื่นๆ" : form.platform,
+        price: form.price !== "" ? parseFloat(form.price) : null,
+      };
+      const { data, error } = await db.from(TABLE).update(dbForm).eq("id", id).select();
       if (error) throw error;
-      setReturns(p => p.map(r => r.id === id ? data[0] : r));
+      setReturns(p => p.map(r => r.id === id ? mapRow(data[0]) : r));
       setLS(new Date());
       toast("อัปเดตรายละเอียดเคสเสร็จสิ้น");
     } catch (error) {
@@ -2101,7 +2239,7 @@ export default function App() {
       const { data, error } = await db.from(TABLE).update({ status }).eq("id", id).select();
       if (error) throw error;
       
-      setReturns(p => p.map(r => r.id === id ? data[0] : r));
+      setReturns(p => p.map(r => r.id === id ? mapRow(data[0]) : r));
       setLS(new Date());
       toast(`เปลี่ยนสเตตัส → "${status}" แล้ว`);
     } catch (error) {
