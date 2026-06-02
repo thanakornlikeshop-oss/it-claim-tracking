@@ -107,6 +107,8 @@ const CHART_PALETTE = ["#4f46e5", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#
 const ACTION_STATUS_LIST = ["ส่งตัวเดิม", "ส่งตัวใหม่", "เก็บเข้าคลัง", "ช่างกำลังดำเนินการ", "รออะไหล่", "ซ่อมแล้ว เก็บเข้าคลังดี", "เก็บเข้าคลังเสีย", "รอซ่อม", "รอซ่อม คืนคลัง"];
 const CARRIER_LIST = ["Thai Post", "Flash", "SPX", "LEX", "J&T", "อื่นๆ"];
 const INCOMING_STATUS_LIST = ["รอตรวจเช็ค", "เช็คสินค้าแล้ว", "ไม่เคลม", "อื่นๆ"];
+const DB_STATUS_FALLBACK = "ตรวจสอบแล้ว";
+const normalizeDbStatus = status => status === "ช่างกำลังซ่อม" ? DB_STATUS_FALLBACK : status;
 
 function unpackDetails(detailsStr) {
   const defaults = {
@@ -120,7 +122,8 @@ function unpackDetails(detailsStr) {
     operator: "",
     new_tracking: "",
     return_phone: "",
-    actual_platform: ""
+    actual_platform: "",
+    actual_status: ""
   };
   if (!detailsStr) return defaults;
   const trimmed = detailsStr.trim();
@@ -147,17 +150,19 @@ function packDetails(unpacked) {
     operator: unpacked.operator || "",
     new_tracking: unpacked.new_tracking || "",
     return_phone: unpacked.return_phone || "",
-    actual_platform: unpacked.actual_platform || ""
+    actual_platform: unpacked.actual_platform || "",
+    actual_status: unpacked.actual_status || ""
   });
 }
 
 function mapRow(r) {
   if (!r) return r;
   const unpacked = unpackDetails(r.details);
-  if (unpacked.actual_platform) {
-    return { ...r, platform: unpacked.actual_platform };
-  }
-  return r;
+  return {
+    ...r,
+    ...(unpacked.actual_platform ? { platform: unpacked.actual_platform } : {}),
+    ...(unpacked.actual_status ? { status: unpacked.actual_status } : {}),
+  };
 }
 
 /* ─── Missing Utility Components ──────────────────────────────── */
@@ -907,11 +912,13 @@ function ReturnForm({ open, onClose, onSave, initial, C }) {
         operator: f.operator,
         new_tracking: f.new_tracking,
         return_phone: f.return_phone,
-        actual_platform: f.platform === "Facebook" ? "Facebook" : ""
+        actual_platform: f.platform === "Facebook" ? "Facebook" : "",
+        actual_status: f.status === "ช่างกำลังซ่อม" ? "ช่างกำลังซ่อม" : ""
       });
       const payload = {
         ...f,
         platform: f.platform === "Facebook" ? "อื่นๆ" : f.platform,
+        status: normalizeDbStatus(f.status),
         sla: claimSla({ date: f.date, status: f.status, details: packed }),
         details: packed
       };
@@ -2204,10 +2211,17 @@ export default function App() {
 
   async function handleEdit(id, form) {
     try {
+      const unpacked = unpackDetails(form.details);
+      const details = packDetails({
+        ...unpacked,
+        actual_status: form.status === "ช่างกำลังซ่อม" ? "ช่างกำลังซ่อม" : "",
+      });
       const dbForm = {
         ...form,
         platform: form.platform === "Facebook" ? "อื่นๆ" : form.platform,
+        status: normalizeDbStatus(form.status),
         price: form.price !== "" ? parseFloat(form.price) : null,
+        details,
       };
       const { data, error } = await db.from(TABLE).update(dbForm).eq("id", id).select();
       if (error) throw error;
@@ -2235,8 +2249,15 @@ export default function App() {
 
   async function handleStatus(id, status) {
     try {
-      setReturns(p => p.map(r => r.id === id ? { ...r, status } : r));
-      const { data, error } = await db.from(TABLE).update({ status }).eq("id", id).select();
+      const item = returns.find(r => r.id === id);
+      if (!item) return;
+      const unpacked = unpackDetails(item.details);
+      const details = packDetails({
+        ...unpacked,
+        actual_status: status === "ช่างกำลังซ่อม" ? "ช่างกำลังซ่อม" : "",
+      });
+      setReturns(p => p.map(r => r.id === id ? { ...r, status, details } : r));
+      const { data, error } = await db.from(TABLE).update({ status: normalizeDbStatus(status), details }).eq("id", id).select();
       if (error) throw error;
       
       setReturns(p => p.map(r => r.id === id ? mapRow(data[0]) : r));
