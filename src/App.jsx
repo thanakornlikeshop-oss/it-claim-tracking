@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Component } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@supabase/supabase-js";
+import * as XLSX from "xlsx";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart
@@ -11,7 +12,7 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const db    = createClient(SUPA_URL, SUPA_KEY);
 const TABLE = "return_cases";
 
-const STATUS_LIST   = ["รับเรื่อง", "รอสินค้าตีกลับ", "ตรวจสอบแล้ว", "ช่างกำลังซ่อม", "เสร็จสิ้น"];
+const STATUS_LIST   = ["ตรวจสอบแล้ว", "ช่างกำลังซ่อม", "เสร็จสิ้น"];
 const PLATFORM_LIST = ["Lazada", "Shopee", "TikTok", "Facebook", "อื่นๆ"];
 const REASON_LIST   = ["ได้รับสินค้าไม่ครบ", "ได้รับสินค้าที่เสียหาย", "สินค้าชำรุดจากการขนส่ง", "เปลี่ยนใจ/สั่งผิด", "สินค้าเสียหาย", "อื่นๆ"];
 
@@ -235,10 +236,15 @@ const claimSla = (r) => {
   const end = r.status === "เสร็จสิ้น" && unpacked.repair_date ? new Date(unpacked.repair_date) : new Date();
   if (isNaN(end)) return "-";
   const diff = Math.max(0, end - start);
-  const days = Math.floor(diff / 86400000);
-  const hours = Math.floor((diff % 86400000) / 3600000);
-  if (days > 0) return `${days} วัน ${hours} ชม.`;
-  return `${hours} ชม.`;
+  const totalDays = Math.floor(diff / 86400000);
+  const years = Math.floor(totalDays / 365);
+  const months = Math.floor((totalDays % 365) / 30);
+  const days = (totalDays % 365) % 30;
+  const parts = [];
+  if (years) parts.push(`${years}ปี`);
+  if (months) parts.push(`${months}เดือน`);
+  if (days || parts.length === 0) parts.push(`${days}วัน`);
+  return parts.join(" ");
 };
 const fmtMoney = n => (n != null && n !== "") ? "฿" + Number(n).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
 const nowLocal = () => {
@@ -547,61 +553,47 @@ function KpiCard({ label, value, icon, gradient, loading, delta, C }) {
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       style={{
-        background: C.raised,
+        background: gradient,
         border: `1px solid ${C.border}`,
         borderRadius: 16,
         padding: "20px 22px",
         position: "relative",
         overflow: "hidden",
         boxShadow: h
-          ? (isDark ? C.glowSm : "0 6px 20px rgba(0,0,0,0.10)")
+          ? (isDark ? C.glowSm : "0 6px 20px rgba(0,0,0,0.15)")
           : (isDark ? "0 2px 12px rgba(0,0,0,0.25)" : "0 1px 4px rgba(0,0,0,0.04)"),
         transform: h ? "translateY(-3px)" : "none",
         transition: "all .22s cubic-bezier(.16,1,.3,1)",
         cursor: "default",
+        color: "#fff",
       }}
     >
-      {/* Accent bar top */}
-      <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 3,
-        background: gradient, borderRadius: "16px 16px 0 0",
-      }}/>
-
       {/* Label + icon row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: C.muted, letterSpacing: .3, textTransform: "uppercase" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", letterSpacing: .3, textTransform: "uppercase" }}>
           {label}
         </span>
         <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: gradient,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 15, color: "#fff",
-          boxShadow: isDark ? "0 3px 10px rgba(0,0,0,0.3)" : "0 3px 8px rgba(0,0,0,0.15)",
+          width: 32, height: 32, borderRadius: 10, background: "rgba(255,255,255,0.2)",
+          display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+          fontSize: 14
         }}>
           <i className={`fas fa-${icon}`}/>
         </div>
       </div>
 
-      {/* Value */}
-      {loading ? (
-        <Skel w="55%" h={28} r={6} dk={isDark}/>
-      ) : (
-        <div style={{
-          fontSize: 28, fontWeight: 700, lineHeight: 1.1,
-          color: C.text, letterSpacing: "-0.8px",
-          fontFamily: "'DM Sans',sans-serif",
-        }}>
-          {value}
-        </div>
-      )}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
+        {loading ? <Skel w={60} h={28} dk={isDark} /> : (
+          <span style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>{value}</span>
+        )}
+      </div>
 
       {/* Delta */}
       {delta != null && !loading && (
         <div style={{
           display: "flex", alignItems: "center", gap: 4, marginTop: 8,
           fontSize: 11, fontWeight: 600,
-          color: delta >= 0 ? C.success : C.danger,
+          color: "rgba(255,255,255,0.9)",
         }}>
           <i className={`fas fa-arrow-${delta >= 0 ? "up" : "down"}`} style={{ fontSize: 9 }}/>
           <span>{Math.abs(delta)}% เทียบสัปดาห์ก่อน</span>
@@ -1159,7 +1151,7 @@ function CaseDetailModal({ open, onClose, item, C, dk }) {
   );
 }
 
-function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, onEdit, onStatusChange, C, dk, toast }) {
+function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, onEdit, onStatusChange, onBulkImport, C, dk, toast }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
@@ -1167,6 +1159,117 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
   const [delItem, setDelItem] = useState(null);
   const [detailItem, setDetailItem] = useState(null);
   const [copyStatus, setCopyStatus] = useState({});
+  const fileInputRef = useRef(null);
+
+  const handleExportExcel = () => {
+    if (returns.length === 0) {
+      toast("ไม่มีข้อมูลให้ส่งออก", "error");
+      return;
+    }
+    const dataToExport = returns.map(r => {
+      const unpacked = unpackDetails(r.details);
+      return {
+        "วันที่": r.date,
+        "แพลตฟอร์ม": r.platform,
+        "ร้านค้า": r.shop,
+        "แอดมิน": r.admin_name,
+        "Order ID": r.order_id,
+        "รหัสพัสดุ": r.tracking_id,
+        "ลูกค้า": r.customer_name,
+        "SKU": r.sku,
+        "ชื่อสินค้า": r.product_name,
+        "จำนวน": r.qty,
+        "ราคา": r.price,
+        "ขนส่ง": unpacked.carrier || "",
+        "เลขพัสดุตีกลับ": unpacked.return_tracking || "",
+        "สถานะรับเรื่อง": r.status,
+        "สถานะตีกลับ": unpacked.incoming_status || "",
+        "สถานะตรวจเช็ค": unpacked.action_status || "",
+        "รายละเอียดเพิ่มเติม": r.note
+      };
+    });
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Returns");
+    XLSX.writeFile(workbook, "ClaimTracking_Export.xlsx");
+  };
+
+  const handleDownloadTemplate = () => {
+    const templateData = [{
+      "วันที่": new Date().toISOString().split('T')[0],
+      "แพลตฟอร์ม": "Shopee",
+      "ร้านค้า": "ShopA",
+      "แอดมิน": "Admin",
+      "Order ID": "12345",
+      "รหัสพัสดุ": "TRACK123",
+      "ลูกค้า": "Customer",
+      "SKU": "SKU001",
+      "ชื่อสินค้า": "Product",
+      "จำนวน": 1,
+      "ราคา": 100,
+      "ขนส่ง": "J&T",
+      "เลขพัสดุตีกลับ": "RET123",
+      "สถานะรับเรื่อง": "ตรวจสอบแล้ว",
+      "สถานะตีกลับ": "ได้รับแล้ว",
+      "สถานะตรวจเช็ค": "ปกติ",
+      "รายละเอียดเพิ่มเติม": "Note"
+    }];
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+    XLSX.writeFile(workbook, "Import_Template.xlsx");
+  };
+
+  const handleImportExcel = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const workbook = XLSX.read(bstr, { type: "binary" });
+        const wsname = workbook.SheetNames[0];
+        const ws = workbook.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const rowsToInsert = data.map(row => {
+          const details = packDetails({
+            carrier: row["ขนส่ง"] || "",
+            return_tracking: row["เลขพัสดุตีกลับ"] || "",
+            incoming_status: row["สถานะตีกลับ"] || "",
+            action_status: row["สถานะตรวจเช็ค"] || ""
+          });
+          return {
+            date: row["วันที่"] || new Date().toISOString().split('T')[0],
+            platform: row["แพลตฟอร์ม"] || "",
+            shop: row["ร้านค้า"] || "",
+            admin_name: row["แอดมิน"] || "",
+            order_id: String(row["Order ID"] || ""),
+            tracking_id: String(row["รหัสพัสดุ"] || ""),
+            customer_name: row["ลูกค้า"] || "",
+            sku: row["SKU"] || "",
+            product_name: row["ชื่อสินค้า"] || "",
+            qty: parseInt(row["จำนวน"] || 1),
+            price: row["ราคา"] ? parseFloat(row["ราคา"]) : null,
+            status: row["สถานะรับเรื่อง"] || "ตรวจสอบแล้ว",
+            note: row["รายละเอียดเพิ่มเติม"] || "",
+            details: details
+          };
+        });
+
+        if (rowsToInsert.length > 0) {
+          if (onBulkImport) {
+            await onBulkImport(rowsToInsert);
+          }
+        }
+      } catch (err) {
+        toast("เกิดข้อผิดพลาดในการอ่านไฟล์", "error");
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = null; // reset
+  };
 
   const counts = STATUS_LIST.reduce((a, s) => ({ ...a, [s]: returns.filter(r => r.status === s).length }), {});
   
@@ -1233,8 +1336,8 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
 
   const KPIS = [
     { label: "เคสทั้งหมด",          value: returns.length,               icon: "clipboard-list", gradient: C.g1 },
-    { label: "รับเรื่องแล้ว",         value: counts["รับเรื่อง"] || 0,      icon: "inbox",          gradient: C.g2 },
-    { label: "รอสินค้าตีกลับ",       value: counts["รอสินค้าตีกลับ"] || 0, icon: "truck-ramp-box", gradient: C.g3 },
+    { label: "ตรวจสอบแล้ว",         value: counts["ตรวจสอบแล้ว"] || 0,      icon: "clipboard-check",          gradient: C.g2 },
+    { label: "ช่างกำลังซ่อม",       value: counts["ช่างกำลังซ่อม"] || 0, icon: "screwdriver-wrench", gradient: C.g3 },
     { label: "เสร็จสิ้น",            value: counts["เสร็จสิ้น"] || 0,      icon: "circle-check",   gradient: C.g4 },
   ];
 
@@ -1282,7 +1385,13 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
             )}
           </div>
           
-          <PrimaryBtn onClick={triggerAdd} icon="plus" C={C}>เพิ่มรายการใหม่</PrimaryBtn>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="file" accept=".xlsx, .xls" ref={fileInputRef} style={{ display: "none" }} onChange={handleImportExcel} />
+            <GhostBtn onClick={handleDownloadTemplate} icon="file-excel" C={C}>โหลด Template</GhostBtn>
+            <GhostBtn onClick={() => fileInputRef.current.click()} icon="upload" C={C}>นำเข้า</GhostBtn>
+            <GhostBtn onClick={handleExportExcel} icon="download" C={C}>ส่งออก</GhostBtn>
+            <PrimaryBtn onClick={triggerAdd} icon="plus" C={C}>เพิ่มรายการใหม่</PrimaryBtn>
+          </div>
         </div>
       </div>
 
@@ -2209,6 +2318,19 @@ export default function App() {
     }
   }
 
+  async function handleBulkImport(rows) {
+    try {
+      const { data, error } = await db.from(TABLE).insert(rows).select();
+      if (error) throw error;
+      setReturns(p => [...data.map(mapRow), ...p]);
+      setLS(new Date());
+      toast(`นำเข้าข้อมูล ${data.length} รายการสำเร็จ`);
+    } catch (error) {
+      toast("เกิดข้อผิดพลาดในการนำเข้า: " + error.message, "error");
+      throw error;
+    }
+  }
+
   async function handleEdit(id, form) {
     try {
       const unpacked = unpackDetails(form.details);
@@ -2494,7 +2616,7 @@ export default function App() {
           overflowY: "auto", background: C.bg,
           transition: "background .25s ease",
         }}>
-          {page === "returns"   && <ReturnCasesPage returns={returns} loading={loading} triggerAdd={() => { setEditItem(null); setFormOpen(true); }} triggerEdit={(item) => { setEditItem(item); setFormOpen(true); }} onDelete={handleDelete} onEdit={handleEdit} onStatusChange={handleStatus} C={C} dk={dk} toast={toast}/>}
+          {page === "returns"   && <ReturnCasesPage returns={returns} loading={loading} triggerAdd={() => { setEditItem(null); setFormOpen(true); }} triggerEdit={(item) => { setEditItem(item); setFormOpen(true); }} onDelete={handleDelete} onEdit={handleEdit} onStatusChange={handleStatus} onBulkImport={handleBulkImport} C={C} dk={dk} toast={toast}/>}
           {page === "reports"   && <ReportsPage     returns={returns} C={C} dk={dk}/>}
           {page === "inventory" && <InventoryPage   returns={returns} C={C} dk={dk}/>}
           {page === "bulkSearch" && <BulkSearchPage returns={returns} C={C} dk={dk} toast={toast} triggerEdit={(item) => { setEditItem(item); setFormOpen(true); }}/>}
