@@ -1171,21 +1171,20 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
       return {
         "วันที่": r.date,
         "แพลตฟอร์ม": r.platform,
-        "ร้านค้า": r.shop,
-        "แอดมิน": r.admin_name,
+        "ร้านค้า": r.store,
+        "แอดมิน": r.staff,
         "Order ID": r.order_id,
-        "รหัสพัสดุ": r.tracking_id,
-        "ลูกค้า": r.customer_name,
+        "ลูกค้า": r.customer,
+        "เบอร์โทร": r.phone,
         "SKU": r.sku,
-        "ชื่อสินค้า": r.product_name,
-        "จำนวน": r.qty,
         "ราคา": r.price,
+        "สาเหตุ": r.reason,
         "ขนส่ง": unpacked.carrier || "",
-        "เลขพัสดุตีกลับ": unpacked.return_tracking || "",
+        "เลขพัสดุรับเข้า": unpacked.incoming_tracking || "",
         "สถานะรับเรื่อง": r.status,
-        "สถานะตีกลับ": unpacked.incoming_status || "",
-        "สถานะตรวจเช็ค": unpacked.action_status || "",
-        "รายละเอียดเพิ่มเติม": r.note
+        "สถานะรับเข้า": unpacked.incoming_status || "",
+        "สถานะดำเนินการ": unpacked.action_status || "",
+        "รายละเอียดเพิ่มเติม": unpacked.note || ""
       };
     });
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
@@ -1201,17 +1200,16 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
       "ร้านค้า": "ShopA",
       "แอดมิน": "Admin",
       "Order ID": "12345",
-      "รหัสพัสดุ": "TRACK123",
       "ลูกค้า": "Customer",
+      "เบอร์โทร": "0801234567",
       "SKU": "SKU001",
-      "ชื่อสินค้า": "Product",
-      "จำนวน": 1,
       "ราคา": 100,
+      "สาเหตุ": "ได้รับสินค้าไม่ครบ",
       "ขนส่ง": "J&T",
-      "เลขพัสดุตีกลับ": "RET123",
+      "เลขพัสดุรับเข้า": "TRACK123",
       "สถานะรับเรื่อง": "ตรวจสอบแล้ว",
-      "สถานะตีกลับ": "ได้รับแล้ว",
-      "สถานะตรวจเช็ค": "ปกติ",
+      "สถานะรับเข้า": "รอตรวจเช็ค",
+      "สถานะดำเนินการ": "ส่งตัวเดิม",
       "รายละเอียดเพิ่มเติม": "Note"
     }];
     const worksheet = XLSX.utils.json_to_sheet(templateData);
@@ -1236,24 +1234,23 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
         const rowsToInsert = data.map(row => {
           const details = packDetails({
             carrier: row["ขนส่ง"] || "",
-            return_tracking: row["เลขพัสดุตีกลับ"] || "",
-            incoming_status: row["สถานะตีกลับ"] || "",
-            action_status: row["สถานะตรวจเช็ค"] || ""
+            incoming_tracking: row["เลขพัสดุรับเข้า"] || "",
+            incoming_status: row["สถานะรับเข้า"] || "รอตรวจเช็ค",
+            action_status: row["สถานะดำเนินการ"] || "ส่งตัวเดิม",
+            note: row["รายละเอียดเพิ่มเติม"] || ""
           });
           return {
             date: row["วันที่"] || new Date().toISOString().split('T')[0],
             platform: row["แพลตฟอร์ม"] || "",
-            shop: row["ร้านค้า"] || "",
-            admin_name: row["แอดมิน"] || "",
+            store: row["ร้านค้า"] || "",
+            staff: row["แอดมิน"] || "",
             order_id: String(row["Order ID"] || ""),
-            tracking_id: String(row["รหัสพัสดุ"] || ""),
-            customer_name: row["ลูกค้า"] || "",
+            customer: row["ลูกค้า"] || "",
+            phone: String(row["เบอร์โทร"] || ""),
             sku: row["SKU"] || "",
-            product_name: row["ชื่อสินค้า"] || "",
-            qty: parseInt(row["จำนวน"] || 1),
             price: row["ราคา"] ? parseFloat(row["ราคา"]) : null,
+            reason: row["สาเหตุ"] || "",
             status: row["สถานะรับเรื่อง"] || "ตรวจสอบแล้ว",
-            note: row["รายละเอียดเพิ่มเติม"] || "",
             details: details
           };
         });
