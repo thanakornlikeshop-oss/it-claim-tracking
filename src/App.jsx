@@ -1239,8 +1239,22 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
             action_status: row["สถานะดำเนินการ"] || "ส่งตัวเดิม",
             note: row["รายละเอียดเพิ่มเติม"] || ""
           });
+
+          let d = row["วันที่"];
+          let dateStr = new Date().toISOString();
+          if (d) {
+            if (typeof d === "number") {
+              const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+              const excelDate = new Date(excelEpoch.getTime() + d * 86400000);
+              dateStr = excelDate.toISOString();
+            } else {
+              const pd = new Date(d);
+              if (!isNaN(pd)) dateStr = pd.toISOString();
+            }
+          }
+
           return {
-            date: row["วันที่"] || new Date().toISOString().split('T')[0],
+            date: dateStr,
             platform: row["แพลตฟอร์ม"] || "",
             store: row["ร้านค้า"] || "",
             staff: row["แอดมิน"] || "",
