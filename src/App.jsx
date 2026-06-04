@@ -1232,12 +1232,31 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
         const data = XLSX.utils.sheet_to_json(ws);
         
         const rowsToInsert = data.map(row => {
+          const rawPlat = String(row["แพลตฟอร์ม"] || "").trim();
+          let dbPlatform = "อื่นๆ";
+          let actualPlatform = "";
+          
+          if (["Lazada", "Shopee", "TikTok", "อื่นๆ"].includes(rawPlat)) {
+            dbPlatform = rawPlat;
+          } else if (rawPlat.toLowerCase() === "facebook") {
+            dbPlatform = "อื่นๆ";
+            actualPlatform = "Facebook";
+          } else if (rawPlat) {
+            dbPlatform = "อื่นๆ";
+            actualPlatform = rawPlat;
+          }
+
+          const excelStatus = row["สถานะรับเรื่อง"] || "ตรวจสอบแล้ว";
+          const isRepair = excelStatus === "ช่างกำลังซ่อม";
+
           const details = packDetails({
             carrier: row["ขนส่ง"] || "",
             incoming_tracking: row["เลขพัสดุรับเข้า"] || "",
             incoming_status: row["สถานะรับเข้า"] || "รอตรวจเช็ค",
             action_status: row["สถานะดำเนินการ"] || "ส่งตัวเดิม",
-            note: row["รายละเอียดเพิ่มเติม"] || ""
+            note: row["รายละเอียดเพิ่มเติม"] || "",
+            actual_platform: actualPlatform,
+            actual_status: isRepair ? "ช่างกำลังซ่อม" : ""
           });
 
           let d = row["วันที่"];
@@ -1253,9 +1272,11 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
             }
           }
 
+          const dbStatus = normalizeDbStatus(excelStatus);
+
           return {
             date: dateStr,
-            platform: row["แพลตฟอร์ม"] || "",
+            platform: dbPlatform,
             store: row["ร้านค้า"] || "",
             staff: row["แอดมิน"] || "",
             order_id: String(row["Order ID"] || ""),
@@ -1264,8 +1285,9 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
             sku: row["SKU"] || "",
             price: row["ราคา"] ? parseFloat(row["ราคา"]) : null,
             reason: row["สาเหตุ"] || "",
-            status: row["สถานะรับเรื่อง"] || "ตรวจสอบแล้ว",
-            details: details
+            status: dbStatus,
+            details: details,
+            sla: claimSla({ date: dateStr, status: excelStatus, details: details })
           };
         });
 
@@ -1275,7 +1297,9 @@ function ReturnCasesPage({ returns, loading, triggerAdd, triggerEdit, onDelete, 
           }
         }
       } catch (err) {
-        toast("เกิดข้อผิดพลาดในการอ่านไฟล์", "error");
+        if (!err.isDbError) {
+          toast("เกิดข้อผิดพลาดในการอ่านไฟล์", "error");
+        }
       }
     };
     reader.readAsBinaryString(file);
@@ -2338,6 +2362,7 @@ export default function App() {
       toast(`นำเข้าข้อมูล ${data.length} รายการสำเร็จ`);
     } catch (error) {
       toast("เกิดข้อผิดพลาดในการนำเข้า: " + error.message, "error");
+      error.isDbError = true;
       throw error;
     }
   }
